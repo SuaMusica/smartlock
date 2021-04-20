@@ -64,8 +64,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
         }
       }
     true
-    }
-    this.client = Credentials.getClient(activity)
+    }   
   }
 
   override fun onDetachedFromActivityForConfigChanges() {
@@ -82,6 +81,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
   // https://gist.github.com/jakubkinst/9c48cbf5c5af4eff7a023c5f77022eb8
   private fun showHints(result: Result) {
+    this.client = Credentials.getClient(activity)
     resultSaved = result
     val hintRequest = HintRequest.Builder()
             .setHintPickerConfig(CredentialPickerConfig.Builder()
