@@ -3,13 +3,9 @@ package br.com.suamusica.smartlock
 import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
-import android.content.Intent
-import android.content.IntentSender
 import android.content.IntentSender.SendIntentException
 import androidx.annotation.NonNull
 import com.google.android.gms.auth.api.credentials.*
-import com.google.android.gms.common.api.ApiException
-import com.google.android.gms.common.api.ResolvableApiException
 import io.flutter.Log
 import io.flutter.embedding.engine.plugins.FlutterPlugin
 import io.flutter.embedding.engine.plugins.activity.ActivityAware
@@ -55,6 +51,23 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
     Log.d(TAG,"onAttachedToActivity")
     this.activity = binding.activity
+    binding.addActivityResultListener { requestCode, resultCode, data ->
+      if (requestCode === RC_HINT) {
+        if (resultCode === -1) {
+          val credential: Credential? = data?.getParcelableExtra(Credential.EXTRA_KEY)
+          credential?.let {
+            Log.d(TAG,it.toString())
+            Log.d(TAG, " NAME: " + it.name)
+            Log.d(TAG, " id: " + it.id)
+            Log.d(TAG, " givenname: " + it.givenName)
+            Log.d(TAG, " familyname: " + it.familyName)
+          }
+        } else {
+          Log.e(TAG, "Hint Read: NOT OK")
+        }
+      }
+    true
+    }
     this.client = Credentials.getClient(activity)
   }
 
@@ -64,45 +77,15 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     if (call.method == SHOW_HINTS) {
-//      showHints()
-      fetchCredentials()
+     showHints()
       result.success(true)
     } else {
       result.notImplemented()
     }
   }
 
-  fun fetchCredentials() {
-    val credentialRequest = CredentialRequest.Builder()
-            .setPasswordLoginSupported(true)
-            .build()
-
-    client.request(credentialRequest).addOnCompleteListener { task ->
-      if (task.isSuccessful) {
-        Log.d(TAG,"TASK IS SUCCESS")
-      } else {
-        val e = task.exception
-        if (e is ResolvableApiException) {
-          // This is most likely the case where the user has multiple saved
-          // credentials and needs to pick one. This requires showing UI to
-          // resolve the read request.
-//          resolveResult(e, RC_READ)
-          Log.d(TAG,"TASK IS ResolvableApiException")
-
-        } else if (e is ApiException) {
-          // The user must create an account or sign in manually.
-          Log.e(TAG,"Unsuccessful credential request.", e)
-
-          // no complete Credential found, let's try to fetch hints at least
-          showHints()
-        }
-      }
-    }
-  }
-
+  // https://gist.github.com/jakubkinst/9c48cbf5c5af4eff7a023c5f77022eb8
   private fun showHints() {
-//    var mCredentialsClient = Credentials.getClient(this.activity)
-
     val hintRequest = HintRequest.Builder()
             .setHintPickerConfig(CredentialPickerConfig.Builder()
                     .setShowCancelButton(true)
@@ -117,18 +100,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     } catch (e: SendIntentException) {
       Log.e(TAG, "Could not start hint picker Intent", e)
     }
-
   }
-  private fun resolveResult(rae: ResolvableApiException, requestCode: Int) {
-    try {
-      rae.startResolutionForResult(activity, requestCode)
-    } catch (e: IntentSender.SendIntentException) {
-      logE("Failed to send resolution.", e)
-    }
-  }
-
-
-
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
     channel.setMethodCallHandler(null)
