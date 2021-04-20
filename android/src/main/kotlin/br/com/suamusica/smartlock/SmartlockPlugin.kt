@@ -56,15 +56,11 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
         if (resultCode === -1) {
           val credential: Credential? = data?.getParcelableExtra(Credential.EXTRA_KEY)
           credential?.let {
-            Log.d(TAG,it.toString())
-            Log.d(TAG, " NAME: " + it.name)
-            Log.d(TAG, " id: " + it.id)
-            Log.d(TAG, " givenname: " + it.givenName)
-            Log.d(TAG, " familyname: " + it.familyName)
-            resultSaved.success(it.id)
+            resultSaved?.success(it.id)
           }
         } else {
           Log.e(TAG, "Hint Read: NOT OK")
+          resultSaved?.success(null)
         }
       }
     true
