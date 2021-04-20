@@ -12,6 +12,7 @@ class MyApp extends StatefulWidget {
 }
 
 class _MyAppState extends State<MyApp> {
+  String? id;
   @override
   void initState() {
     super.initState();
@@ -25,11 +26,22 @@ class _MyAppState extends State<MyApp> {
           title: const Text('Plugin example app'),
         ),
         body: Center(
-            child: ElevatedButton(
-          child: Text('Click me'),
-          onPressed: () {
-            Smartlock.showHints();
-          },
+            child: Column(
+          children: [
+            if (id != null) Text("Your id is $id"),
+            ElevatedButton(
+              child: Text('Click me'),
+              onPressed: () {
+                Smartlock.showHints().then((value) {
+                  setState(() {
+                    if (value != null) {
+                      id = value;
+                    }
+                  });
+                });
+              },
+            ),
+          ],
         )),
       ),
     );

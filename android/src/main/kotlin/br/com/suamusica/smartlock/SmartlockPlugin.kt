@@ -31,7 +31,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
   private lateinit var activity: Activity
   private lateinit var applicationContext: Context
   private lateinit var client: CredentialsClient
-
+  private var resultSaved: Result? = null
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     Log.d(TAG,"onAttachedToEngine");
     applicationContext = flutterPluginBinding.applicationContext
@@ -61,6 +61,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
             Log.d(TAG, " id: " + it.id)
             Log.d(TAG, " givenname: " + it.givenName)
             Log.d(TAG, " familyname: " + it.familyName)
+            resultSaved.success(it.id)
           }
         } else {
           Log.e(TAG, "Hint Read: NOT OK")
@@ -77,15 +78,15 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
     if (call.method == SHOW_HINTS) {
-     showHints()
-      result.success(true)
+     showHints(result)
     } else {
       result.notImplemented()
     }
   }
 
   // https://gist.github.com/jakubkinst/9c48cbf5c5af4eff7a023c5f77022eb8
-  private fun showHints() {
+  private fun showHints(result: Result) {
+    resultSaved = result
     val hintRequest = HintRequest.Builder()
             .setHintPickerConfig(CredentialPickerConfig.Builder()
                     .setShowCancelButton(true)
@@ -99,6 +100,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
       activity.startIntentSenderForResult(intent.intentSender, RC_HINT, null, 0, 0, 0)
     } catch (e: SendIntentException) {
       Log.e(TAG, "Could not start hint picker Intent", e)
+      result.success(null)
     }
   }
 
