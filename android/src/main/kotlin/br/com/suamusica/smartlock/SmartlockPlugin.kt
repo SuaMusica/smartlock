@@ -4,6 +4,7 @@ import android.app.Activity
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.IntentSender
 import android.content.IntentSender.SendIntentException
 import androidx.annotation.NonNull
 import com.google.android.gms.auth.api.credentials.*
@@ -118,6 +119,14 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
     }
 
   }
+  private fun resolveResult(rae: ResolvableApiException, requestCode: Int) {
+    try {
+      rae.startResolutionForResult(activity, requestCode)
+    } catch (e: IntentSender.SendIntentException) {
+      logE("Failed to send resolution.", e)
+    }
+  }
+
 
 
 
