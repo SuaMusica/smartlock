@@ -14,10 +14,11 @@ import io.flutter.plugin.common.MethodCall
 import io.flutter.plugin.common.MethodChannel
 import io.flutter.plugin.common.MethodChannel.MethodCallHandler
 import io.flutter.plugin.common.MethodChannel.Result
+import io.flutter.plugin.common.PluginRegistry.ActivityResultListener
 
 
 /** SmartlockPlugin */
-class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
+class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, ActivityResultListener {
   companion object {
     const val TAG = "Smartlock"
     const val SHOW_HINTS = "showHints"
@@ -28,7 +29,8 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
   }
   private lateinit var channel : MethodChannel
-  private lateinit var activity: Activity
+  private var activity: Activity? = null
+  private var activityBinding: ActivityPluginBinding? = null
   private lateinit var applicationContext: Context
   private lateinit var client: CredentialsClient
   private var resultSaved: Result? = null
@@ -42,33 +44,47 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
   override fun onDetachedFromActivity() {
     Log.d(TAG,"onDetachedFromActivity");
+    activityBinding?.removeActivityResultListener(this)
+    activityBinding = null
+    activity = null
   }
 
   override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
     Log.d(TAG,"onReattachedToActivityForConfigChanges");
+    onAttachedToActivity(binding)
   }
 
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
     Log.d(TAG,"onAttachedToActivity")
+    activityBinding = binding
     this.activity = binding.activity
-    binding.addActivityResultListener { requestCode, resultCode, data ->
-      if (requestCode === RC_HINT) {
-        if (resultCode === -1) {
-          val credential: Credential? = data?.getParcelableExtra(Credential.EXTRA_KEY)
-          credential?.let {
-            resultSaved?.success(it.id)
-          }
-        } else {
-          Log.e(TAG, "Hint Read: NOT OK")
-          resultSaved?.success(null)
-        }
-      }
-    true
-    }   
+    binding.addActivityResultListener(this)
   }
 
   override fun onDetachedFromActivityForConfigChanges() {
     Log.d(TAG,"onDetachedFromActivityForConfigChanges");
+    activityBinding?.removeActivityResultListener(this)
+    activityBinding = null
+    activity = null
+  }
+
+  override fun onActivityResult(requestCode: Int, resultCode: Int, data: android.content.Intent?): Boolean {
+    if (requestCode != RC_HINT) {
+      return false
+    }
+
+    val reply = resultSaved ?: return true
+    resultSaved = null
+
+    if (resultCode == Activity.RESULT_OK) {
+      val credential: Credential? = data?.getParcelableExtra(Credential.EXTRA_KEY)
+      reply.success(credential?.id)
+    } else {
+      Log.e(TAG, "Hint Read: NOT OK")
+      reply.success(null)
+    }
+
+    return true
   }
 
   override fun onMethodCall(@NonNull call: MethodCall, @NonNull result: Result) {
@@ -81,7 +97,18 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
   // https://gist.github.com/jakubkinst/9c48cbf5c5af4eff7a023c5f77022eb8
   private fun showHints(result: Result) {
-    this.client = Credentials.getClient(activity)
+    val currentActivity = activity
+    if (currentActivity == null) {
+      result.error("no_activity", "Plugin is not attached to an activity", null)
+      return
+    }
+
+    if (resultSaved != null) {
+      result.error("request_in_progress", "A hint picker request is already running", null)
+      return
+    }
+
+    this.client = Credentials.getClient(currentActivity)
     resultSaved = result
     val hintRequest = HintRequest.Builder()
             .setHintPickerConfig(CredentialPickerConfig.Builder()
@@ -93,9 +120,10 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware {
 
     val intent: PendingIntent = client.getHintPickerIntent(hintRequest)
     try {
-      activity.startIntentSenderForResult(intent.intentSender, RC_HINT, null, 0, 0, 0)
+      currentActivity.startIntentSenderForResult(intent.intentSender, RC_HINT, null, 0, 0, 0)
     } catch (e: SendIntentException) {
       Log.e(TAG, "Could not start hint picker Intent", e)
+      resultSaved = null
       result.success(null)
     }
   }
