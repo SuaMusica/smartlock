@@ -33,7 +33,45 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, Activity
   private var activityBinding: ActivityPluginBinding? = null
   private lateinit var applicationContext: Context
   private lateinit var client: CredentialsClient
-  private var resultSaved: Result? = null
+  private var resultSaved: OneShotResult? = null
+
+  private class OneShotResult(private val delegate: Result) : Result {
+    private var completed = false
+
+    @Synchronized
+    override fun success(result: Any?) {
+      if (completed) return
+      completed = true
+      try {
+        delegate.success(result)
+      } catch (e: IllegalStateException) {
+        Log.w(TAG, "Ignoring duplicate Smartlock result", e)
+      }
+    }
+
+    @Synchronized
+    override fun error(errorCode: String, errorMessage: String?, errorDetails: Any?) {
+      if (completed) return
+      completed = true
+      try {
+        delegate.error(errorCode, errorMessage, errorDetails)
+      } catch (e: IllegalStateException) {
+        Log.w(TAG, "Ignoring duplicate Smartlock error result", e)
+      }
+    }
+
+    @Synchronized
+    override fun notImplemented() {
+      if (completed) return
+      completed = true
+      try {
+        delegate.notImplemented()
+      } catch (e: IllegalStateException) {
+        Log.w(TAG, "Ignoring duplicate Smartlock notImplemented result", e)
+      }
+    }
+  }
+
   override fun onAttachedToEngine(@NonNull flutterPluginBinding: FlutterPlugin.FlutterPluginBinding) {
     Log.d(TAG,"onAttachedToEngine");
     applicationContext = flutterPluginBinding.applicationContext
@@ -47,6 +85,8 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, Activity
     activityBinding?.removeActivityResultListener(this)
     activityBinding = null
     activity = null
+    resultSaved?.success(null)
+    resultSaved = null
   }
 
   override fun onReattachedToActivityForConfigChanges(binding: ActivityPluginBinding) {
@@ -56,6 +96,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, Activity
 
   override fun onAttachedToActivity(binding: ActivityPluginBinding) {
     Log.d(TAG,"onAttachedToActivity")
+    activityBinding?.removeActivityResultListener(this)
     activityBinding = binding
     this.activity = binding.activity
     binding.addActivityResultListener(this)
@@ -109,7 +150,7 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, Activity
     }
 
     this.client = Credentials.getClient(currentActivity)
-    resultSaved = result
+    resultSaved = OneShotResult(result)
     val hintRequest = HintRequest.Builder()
             .setHintPickerConfig(CredentialPickerConfig.Builder()
                     .setShowCancelButton(true)
@@ -123,12 +164,15 @@ class SmartlockPlugin: FlutterPlugin, MethodCallHandler, ActivityAware, Activity
       currentActivity.startIntentSenderForResult(intent.intentSender, RC_HINT, null, 0, 0, 0)
     } catch (e: SendIntentException) {
       Log.e(TAG, "Could not start hint picker Intent", e)
+      val reply = resultSaved
       resultSaved = null
-      result.success(null)
+      reply?.success(null)
     }
   }
 
   override fun onDetachedFromEngine(@NonNull binding: FlutterPlugin.FlutterPluginBinding) {
+    resultSaved?.success(null)
+    resultSaved = null
     channel.setMethodCallHandler(null)
   }
 
